@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  labels:
+    app: notifier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notifier
+  template:
+    metadata:
+      name: notifier
+      labels:
+        app: notifier
+    spec:
+      containers:
+        - name: notifier
+          image: notifier:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SLACK_CHANNEL_NAME
+              value: help
+            - name: SLACK_API_TOKEN
+              value: <your-token-here>
+            - name: TLS_CERT_PATH
+              value: /etc/secrets/tls.crt
+            - name: TLS_KEY_PATH
+              value: /etc/secrets/tls.key
+          volumeMounts:
+            - name: tls-secrets
+              readOnly: true
+              mountPath: "/etc/secrets"
+      volumes:
+        - name: tls-secrets
+          secret:
+            secretName: notifier-tls-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifier
+  labels:
+    app: notifier
+spec:
+  publishNotReadyAddresses: true
+  ports:
+    - port: 443
+      targetPort: 8443
+  selector:
+    app: notifier
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: notifier
+  labels:
+    app: notifier
+webhooks:
+  - name: notifier.default.svc.cluster.local
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      caBundle: <your-ca-bundle>
+      service:
+        name: notifier
+        namespace: default
+        path: /mutate
+        port: 443
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: ["apps"]
+        apiVersions: ["v1", "v1beta1"]
+        resources: ["deployments"]
+        scope: "Namespaced"
+    timeoutSeconds: 5
