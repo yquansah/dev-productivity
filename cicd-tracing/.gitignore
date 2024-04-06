@@ -1,0 +1,5 @@
+# Environment files
+.env
+
+# Private Token
+*.pem
