@@ -3,11 +3,12 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/go-github/v60/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/pkg/errors"
-	"github.com/yquansah/cicd-tracing/pkg/coordinator"
+	"github.com/yquansah/cicd-tracing/internal/coordinator"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -33,6 +34,7 @@ func (p *PushHandler) Handles() []string {
 }
 
 func (p *PushHandler) Handle(ctx context.Context, eventType, deliveryID string, payload []byte) error {
+	fmt.Println("PUSH HAPPENING")
 	var event github.PushEvent
 
 	if err := json.Unmarshal(payload, &event); err != nil {

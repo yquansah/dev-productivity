@@ -12,8 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 	"github.com/palantir/go-githubapp/githubapp"
-	"github.com/yquansah/cicd-tracing/pkg/coordinator"
-	"github.com/yquansah/cicd-tracing/pkg/handler"
+	"github.com/yquansah/cicd-tracing/internal/coordinator"
+	"github.com/yquansah/cicd-tracing/internal/handler"
 	"go.opentelemetry.io/otel/exporters/zipkin"
 	"go.opentelemetry.io/otel/sdk/trace"
 )
@@ -83,8 +83,9 @@ func run() error {
 
 	pushHandler := handler.NewPushHandler(cc, preamble, deploymentTracer, coordinatorClient)
 	checkSuiteHandler := handler.NewCheckSuiteHandler(cc, preamble, deploymentTracer, coordinatorClient)
+	checkRunHandler := handler.NewCheckRunHandler(cc, preamble, deploymentTracer, coordinatorClient)
 
-	webhookHandler := githubapp.NewDefaultEventDispatcher(config, checkSuiteHandler, pushHandler)
+	webhookHandler := githubapp.NewDefaultEventDispatcher(config, checkSuiteHandler, pushHandler, checkRunHandler)
 
 	mux.Handle(githubapp.DefaultWebhookRoute, webhookHandler)
 
