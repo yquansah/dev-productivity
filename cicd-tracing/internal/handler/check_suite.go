@@ -34,17 +34,7 @@ func (c *CheckSuiteHandler) Handles() []string {
 }
 
 func getCheckSuiteKey(sha string) string {
-	return fmt.Sprintf("%s_check_suite_requested", sha)
-}
-
-func (c *CheckSuiteHandler) findParent(key string) trace.Span {
-	for {
-		span, _ := c.coordinator.Get(key)
-		if span != nil {
-			return span
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	return fmt.Sprintf("%s_check_suite", sha)
 }
 
 func (c *CheckSuiteHandler) Handle(ctx context.Context, eventType, deliveryID string, payload []byte) error {
@@ -55,15 +45,22 @@ func (c *CheckSuiteHandler) Handle(ctx context.Context, eventType, deliveryID st
 	}
 
 	sha := event.GetCheckSuite().GetHeadSHA()
-
 	action := event.GetAction()
+	spanKeyName := getCheckSuiteKey(sha)
 
 	if action == "requested" {
-		span := c.findParent(sha)
+		findParent := func(key string) trace.Span {
+			for {
+				span, _ := c.coordinator.Get(key)
+				if span != nil {
+					return span
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
 
-		spanKeyName := getCheckSuiteKey(sha)
-
-		_, checkSuiteSpan := c.tracer.Start(trace.ContextWithSpan(context.Background(), span), spanKeyName)
+		span := findParent(sha)
+		_, checkSuiteSpan := c.tracer.Start(trace.ContextWithSpan(ctx, span), spanKeyName)
 
 		err := c.coordinator.Put(spanKeyName, checkSuiteSpan)
 		if err != nil {
@@ -72,9 +69,7 @@ func (c *CheckSuiteHandler) Handle(ctx context.Context, eventType, deliveryID st
 	}
 
 	if action == "completed" {
-		spanKeyRequestedName := getCheckSuiteKey(sha)
-
-		checkSuiteSpan, err := c.coordinator.Get(spanKeyRequestedName)
+		checkSuiteSpan, err := c.coordinator.Get(spanKeyName)
 		if err != nil {
 			return err
 		}

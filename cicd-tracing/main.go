@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -15,8 +16,17 @@ import (
 	"github.com/yquansah/cicd-tracing/internal/coordinator"
 	"github.com/yquansah/cicd-tracing/internal/handler"
 	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
+
+func newResource(ctx context.Context) (*resource.Resource, error) {
+	return resource.New(ctx, resource.WithAttributes(
+		semconv.ServiceNameKey.String("deployment"),
+		semconv.ServiceVersionKey.String("1.0.0"),
+	), resource.WithFromEnv())
+}
 
 func run() error {
 	if err := godotenv.Load(); err != nil {
@@ -74,7 +84,13 @@ func run() error {
 
 	// Tracing registration/configuration
 	spanProcessor := trace.NewSimpleSpanProcessor(zipkinExporter)
-	tracingProvider := trace.NewTracerProvider()
+
+	rsc, err := newResource(context.Background())
+	if err != nil {
+		return err
+	}
+
+	tracingProvider := trace.NewTracerProvider(trace.WithResource(rsc), trace.WithSampler(trace.AlwaysSample()))
 	tracingProvider.RegisterSpanProcessor(spanProcessor)
 	deploymentTracer := tracingProvider.Tracer("deployment")
 

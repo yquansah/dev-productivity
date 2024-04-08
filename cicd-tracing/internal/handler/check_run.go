@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/go-github/v60/github"
@@ -29,60 +30,52 @@ func NewCheckRunHandler(cc githubapp.ClientCreator, preamble string, tracer trac
 }
 
 func (c *CheckRunHandler) Handles() []string {
-	return []string{"check_suite"}
+	return []string{"check_run"}
 }
 
-func (c *CheckRunHandler) findParent(key string) trace.Span {
-	for {
-		span, _ := c.coordinator.Get(key)
-		if span != nil {
-			return span
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+func getCheckRunName(sha, checkRunName string) string {
+	return fmt.Sprintf("%s_check_run_%s", sha, checkRunName)
 }
 
 func (c *CheckRunHandler) Handle(ctx context.Context, eventType, deliveryID string, payload []byte) error {
-	var event github.CheckRun
+	var event github.CheckRunEvent
 
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return err
 	}
 
-	_ = event.GetCheckSuite().GetHeadSHA()
+	sha := event.GetCheckRun().GetHeadSHA()
+	action := event.GetAction()
+	checkRunName := event.GetCheckRun().GetName()
+	checkRunKey := getCheckRunName(sha, checkRunName)
 
-	// action := event.GetAction()
-	//
-	// if action == "requested" {
-	// 	span := c.findParent(sha)
-	//
-	// 	spanKeyName := getCheckSuiteKey(sha)
-	//
-	// 	_, checkSuiteSpan := c.tracer.Start(trace.ContextWithSpan(context.Background(), span), spanKeyName)
-	//
-	// 	err := c.coordinator.Put(spanKeyName, checkSuiteSpan)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-	//
-	// if action == "completed" {
-	// 	spanKeyRequestedName := getCheckSuiteKey(sha)
-	//
-	// 	checkSuiteSpan, err := c.coordinator.Get(spanKeyRequestedName)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	checkSuiteSpan.End()
-	//
-	// 	pushSpan, err := c.coordinator.Get(sha)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	pushSpan.End()
-	// }
+	if action == "created" {
+		findParent := func(key string) trace.Span {
+			for {
+				span, _ := c.coordinator.Get(key)
+				if span != nil {
+					return span
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+
+		checkSuiteSpan := findParent(getCheckSuiteKey(sha))
+		_, checkRunSpan := c.tracer.Start(trace.ContextWithSpan(ctx, checkSuiteSpan), checkRunKey)
+
+		err := c.coordinator.Put(checkRunKey, checkRunSpan)
+		if err != nil {
+			return err
+		}
+	}
+
+	if action == "completed" {
+		span, err := c.coordinator.Get(checkRunKey)
+		if err != nil {
+			return err
+		}
+		span.End()
+	}
 
 	return nil
 }
